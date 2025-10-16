@@ -130,56 +130,16 @@ function preload() {
   }
 }
 
-// ---- Make the canvas fill the screen with no scrollbars ----
-// Hard-lock the page to the viewport so no scrollbars appear.
-function enableFullscreenCanvas() {
-  const style = document.createElement('style');
-  style.innerHTML = `
-    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-    * { box-sizing: border-box; }
-    canvas { display: block; } /* avoid inline-canvas line-height gap */
-  `;
-  document.head.appendChild(style);
-
-  // belt-and-braces
-  document.documentElement.style.overflow = 'hidden';
-  document.body.style.overflow = 'hidden';
-}
-
-
 //----------------------------------------------------------------------
 // setup()
 //----------------------------------------------------------------------
 function setup() {
-  
-    enableFullscreenCanvas();
-
-  // Create and pin to viewport
-  const cnv = createCanvas(windowWidth, windowHeight);
-  pixelDensity(1);                 // optional: avoids massive devicePixelRatio canvases
-  cnv.style('position', 'fixed');  // keep canvas fixed to window
-  cnv.style('inset', '0');         // top/right/bottom/left: 0
-  cnv.style('width', '100vw');     // fill viewport width
-  cnv.style('height', '100vh');    // fill viewport height
-  cnv.style('display', 'block');
-
+  createCanvas(windowWidth, windowHeight);
   lastW = width;
   lastH = height;
   rectMode(CENTER);
   textAlign(CENTER, CENTER);
   gridColor = color(200, 200, 200, 150);
-
-  // If you have a fixed controls panel, cap it so it never forces scroll:
-  if (typeof controlsWrapper !== 'undefined' && controlsWrapper) {
-    controlsWrapper
-      .style('position','fixed')
-      .style('left','10px')
-      .style('top','10px')
-      .style('max-height','calc(100vh - 20px)')
-      .style('overflow','auto')
-      .style('max-width','min(320px, 35vw)')
-      .style('overflow-x','hidden');
-  }
 
   // --- small setup
   smallBase = [
