@@ -130,10 +130,22 @@ function preload() {
   }
 }
 
+// ---- Make the canvas fill the screen with no scrollbars ----
+function enableFullscreenCanvas() {
+  const style = document.createElement('style');
+  style.innerHTML = `
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    canvas { display: block; } /* removes inline-canvas extra line-height gap */
+  `;
+  document.head.appendChild(style);
+}
+
+
 //----------------------------------------------------------------------
 // setup()
 //----------------------------------------------------------------------
 function setup() {
+    enableFullscreenCanvas();  
   createCanvas(windowWidth, windowHeight);
   lastW = width;
   lastH = height;
