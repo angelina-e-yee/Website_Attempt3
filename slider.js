@@ -26,12 +26,11 @@ function drawImageFit(img, cx, cy, maxDimPx) {
 
 let lastW = BASE_W, lastH = BASE_H;
 
-// Squares (small, medium, large)
+// Squares (small, medium)
 let numSmall = 14;
 let smallSize = 49; // this is now a "max dimension" not a fixed square
 let smallBase = [];
 let smallNoiseX = [], smallNoiseY = [], smallPos = [], smallVel = [], smallAcc = [], smallImgs = [];
-// (kept arrays smallMasked/medMasked from earlier version OUT to avoid confusion)
 
 let connections = [
   [0, 1],[1, 2],[1, 3],[2, 11],[11, 10],[10, 12],[13, 5],[5, 6],[6, 9],[9, 7],
@@ -50,7 +49,6 @@ let addSmallConnections = [
 ];
 
 let numMed = 3, medSize = 170, medBase = [], medNoiseX = [], medNoiseY = [], medPos = [], medVel = [], medAcc = [], medImgs = [];
-let numBig = 3, bigSize = 280, bigBase = [], bigNoiseX = [], bigNoiseY = [], bigPos = [], bigVel = [], bigAcc = [], bigVideos = [];
 
 // --- Add-ons (3 independent images with no connections) ---
 const addCount = 3;
@@ -59,7 +57,6 @@ const addOnFiles = [
   "Add_ons/Add_on2.png",
   "Add_ons/Add_on3.png"
 ];
-// RAW coords; converted to vectors in setup()
 
 let addBase = []; // p5.Vector after setup()
 let addSizes = [80, 280, 220]; // each is a "max dimension"
@@ -67,42 +64,54 @@ let addImgs = [];
 let addNoiseX = [], addNoiseY = [];
 let addPos = [], addVel = [], addAcc = [];
 
+// ---------------- Sliders / Toggles ----------------
+let smallNoiseStep = 0.002;
+let smallRadiusMax = 50;
+let medNoiseStep   = 0.005;
+let medRadiusMax   = 20;
+let springK        = 0.02;
+let damping        = 0.95;
+let impulseStrength = 0.5;
+let impactRadiusFactor = 20;
+
+// UI elements
+let sliderSmallNoiseStep, spanSmallNoiseStep;
+let sliderSmallRadiusMax, spanSmallRadiusMax;
+let sliderMedNoiseStep, spanMedNoiseStep;
+let sliderMedRadiusMax, spanMedRadiusMax;
+let sliderSpringK, spanSpringK;
+let sliderDamping, spanDamping;
+let sliderImpulse, spanImpulse;
+let sliderImpactRadius, spanImpactRadius;
+let controlsWrapper;
+
 let gridColor;
-let smallNoiseStep = 0.002, smallRadiusMax = 50;
-let medNoiseStep = 0.005, medRadiusMax = 20;
-let bigNoiseStep = 0.005, bigRadiusMax = 30;
-let springK = 0.02, damping = 0.95;
-let impulseStrength = 0.5, impactRadiusFactor = 20;
 
 // --- Purple hazard wedges ---------------------------------------------
 const hazardAreas = [
   // HAZARD #1: triangle using SMALL 5, 6, 8 (0-based indices 4, 5, 7)
   {
     vertices: [
-      { kind: 'small', i: 4 },
       { kind: 'small', i: 5 },
-      { kind: 'small', i: 7 },
+      { kind: 'small', i: 6 },
+      { kind: 'small', i: 8 },
     ]
   },
 
-  // HAZARD #2: triangle connecting SMALL 1, 2, and 13
+  // HAZARD #2: triangle connecting SMALL 1, 2, and 13 (+ addon 2)
   {
     vertices: [
       { kind: 'small', i: 0 },
       { kind: 'small', i: 1 },
       { kind: 'small', i: 12 },
       { kind: 'addon', i: 1 },
-
     ]
   },
 ];
 
-
-
 //----------------------------------------------------------------------
 // preload(): load images
 //----------------------------------------------------------------------
-
 function preload() {
   // small
   for (let i = 1; i <= numSmall; i++) {
@@ -124,7 +133,6 @@ function preload() {
 //----------------------------------------------------------------------
 // setup()
 //----------------------------------------------------------------------
-
 function setup() {
   createCanvas(windowWidth, windowHeight);
   lastW = width;
@@ -157,46 +165,58 @@ function setup() {
     medAcc[i] = createVector(0,0);
   }
 
-  // --- large setup
-  bigBase = [createVector(450,450),createVector(1550,920),createVector(1300,250)];
-  for (let i = 0; i < numBig; i++) {
-    bigNoiseX[i] = random(10); bigNoiseY[i] = random(10);
-    bigPos[i] = createVector(px(bigBase[i].x), py(bigBase[i].y));
-    bigVel[i] = createVector(0,0); bigAcc[i] = createVector(0,0);
-    let path = `Videos/Large_video${i+1}.mp4`;
-    ((idx) => {
-      let vid = createVideo(path, () => { vid.volume(0); vid.loop(); vid.hide(); bigVideos[idx] = vid; });
-      vid.size(bigSize,bigSize);
-    })(i);
-  }
-
+  // --- add-ons setup (convert raw coords to vectors; init physics)
   addBase = [
     createVector(895, 350),
     createVector(510, 900),
     createVector(470, 360)
   ];
-
-  // --- add-ons setup (convert raw coords to vectors; init physics)
   for (let i = 0; i < addCount; i++) {
-  const base = addBase[i]; // now using your createVector list
-  addNoiseX[i] = random(10);
-  addNoiseY[i] = random(10);
-  addPos[i] = createVector(px(base.x), py(base.y));
-  addVel[i] = createVector(0,0);
-  addAcc[i] = createVector(0,0);
-}
+    const base = addBase[i];
+    addNoiseX[i] = random(10);
+    addNoiseY[i] = random(10);
+    addPos[i] = createVector(px(base.x), py(base.y));
+    addVel[i] = createVector(0,0);
+    addAcc[i] = createVector(0,0);
+  }
+
+  // ---------------- Sliders UI ----------------
+  controlsWrapper = createDiv('').style('position','fixed')
+                                 .style('left','10px')
+                                 .style('top','10px')
+                                 .style('padding','8px 10px')
+                                 .style('background','rgba(255,255,255,0.8)')
+                                 .style('backdrop-filter','blur(4px)')
+                                 .style('border','1px solid #ddd')
+                                 .style('border-radius','8px')
+                                 .style('font','12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial');
+
+  function addSliderRow(label, min, max, val, step) {
+    const row = createDiv('').parent(controlsWrapper).style('margin','4px 0');
+    createSpan(label).parent(row).style('display','inline-block').style('width','145px');
+    const s = createSlider(min, max, val, step).parent(row).style('width','160px').style('vertical-align','middle');
+    const sp = createSpan(val).parent(row).style('display','inline-block').style('width','60px').style('text-align','right').style('margin-left','8px');
+    return [s, sp];
+  }
+
+  [sliderSmallNoiseStep, spanSmallNoiseStep] = addSliderRow('smallNoiseStep', 0.0005, 0.01, 0.002, 0.0001);
+  [sliderSmallRadiusMax, spanSmallRadiusMax] = addSliderRow('smallRadiusMax', 0, 200, 50, 1);
+  [sliderMedNoiseStep,   spanMedNoiseStep]   = addSliderRow('medNoiseStep',   0.0005, 0.01, 0.005, 0.0001);
+  [sliderMedRadiusMax,   spanMedRadiusMax]   = addSliderRow('medRadiusMax',   0, 200, 20, 1);
+  [sliderSpringK,        spanSpringK]        = addSliderRow('springK',        0, 0.2, 0.02, 0.005);
+  [sliderDamping,        spanDamping]        = addSliderRow('damping',        0, 1, 0.95, 0.01);
+  [sliderImpulse,        spanImpulse]        = addSliderRow('impulseStrength',0, 2, 0.5, 0.01);
+  [sliderImpactRadius,   spanImpactRadius]   = addSliderRow('impactRadius',   1, 20, 20, 1);
 }
 
 //----------------------------------------------------------------------
 // Responsive resize
 //----------------------------------------------------------------------
-
 function windowResized() {
   const scaleX = windowWidth / lastW, scaleY = windowHeight / lastH;
   resizeCanvas(windowWidth, windowHeight);
   for (let i = 0; i < numSmall; i++) { smallPos[i].x*=scaleX; smallPos[i].y*=scaleY; }
   for (let i = 0; i < numMed; i++)   { medPos[i].x*=scaleX;   medPos[i].y*=scaleY; }
-  for (let i = 0; i < numBig; i++)   { bigPos[i].x*=scaleX;   bigPos[i].y*=scaleY; }
   for (let i = 0; i < addCount; i++) { addPos[i].x*=scaleX;   addPos[i].y*=scaleY; }
   lastW = width; lastH = height;
 }
@@ -218,13 +238,16 @@ function sortClockwise(points) {
     .map(o => o.p);
 }
 
-// --- draw hatch-only interior + outline (no fill)
+// --- draw hatch-only interior + outline (NO FILL, no “sheet”) ---
 function drawHazardLines(vertices) {
+  // Resolve vertices to live positions
   let pts = vertices.map(resolveVertex).filter(Boolean);
   if (pts.length < 3) return;
+
+  // Sort clockwise for a clean polygon
   pts = sortClockwise(pts);
 
-  // bounds for hatching
+  // Compute bounds for hatching
   let minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
   for (const p of pts) {
     if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
@@ -233,63 +256,73 @@ function drawHazardLines(vertices) {
 
   const ctx = drawingContext;
 
-  // --- draw only the diagonal hatch lines inside polygon
+  // Build a polygon path once
+  const poly = new Path2D();
+  poly.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) poly.lineTo(pts[i].x, pts[i].y);
+  poly.closePath();
+
+  // ==== HATCH STROKES ONLY (inside polygon) ====
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.closePath();
-  ctx.clip();
+  ctx.globalAlpha = 1;                           // ensure no inherited alpha
+  ctx.globalCompositeOperation = 'source-over';  // normal blend
+  ctx.clip(poly);                                // clip to polygon
 
   ctx.lineWidth   = ps(1);
-  ctx.strokeStyle = 'rgba(137, 90, 255, 0.4)'; // purple hatch
-  ctx.setLineDash([]);
-  const step = ps(10), pad = ps(200);
+  ctx.setLineDash([]);                           // solid hatch
+  ctx.strokeStyle = 'rgba(137, 90, 255, 0.4)';   // purple hatch line
+
+  const step = ps(7), pad = ps(200);
   for (let x = minX - (maxY - minY) - pad; x < maxX + (maxY - minY) + pad; x += step) {
     ctx.beginPath();
-    ctx.moveTo(x, maxY + pad);
+    ctx.moveTo(x,           maxY + pad);
     ctx.lineTo(x + (maxY - minY) + pad, minY - pad);
     ctx.stroke();
   }
-  ctx.restore(); // ← very important! restores stroke color & dash settings
+  ctx.restore(); // ← removes clip & any state changes
 
-  // --- purple outline (no fill)
-  push();
-  noFill();
-  stroke(137, 90, 255);
-  strokeWeight(ps(2));
-  drawingContext.setLineDash([]);
-  beginShape();
-  for (const p of pts) vertex(p.x, p.y);
-  endShape(CLOSE);
-  pop();
+  // ==== PURPLE OUTLINE (stroke only) ====
+  // ==== OUTLINE (match connection grey, not purple) ====
+push();
+noFill();
+// Use the same grey as your solid connections (210). 
+// If you prefer the slightly lighter 220 you use elsewhere, swap 210 → 220.
+stroke(210);
+strokeWeight(ps(1));           // match small↔small line weight
+drawingContext.setLineDash([]); // solid outline (not dotted)
+beginShape();
+for (const p of pts) vertex(p.x, p.y);
+endShape(CLOSE);
+pop();
+
 }
 
 
-
-// draw all hazards (call this where you already do)
+// draw all hazards
 function drawHazardAreas() {
   for (const area of hazardAreas) drawHazardLines(area.vertices);
 }
 
-
-
-
 //----------------------------------------------------------------------
 // draw()
 //----------------------------------------------------------------------
-
 function draw() {
-  const smallSizePx = ps(smallSize);  // max dimension for small images
-  const medSizePx   = ps(medSize);    // max dimension for medium images
-  const bigSizePx   = ps(bigSize);    // (big still unused if videos off)
-  const smallR = ps(smallRadiusMax), medR = ps(medRadiusMax), bigR = ps(bigRadiusMax);
-  const impulsePx = impulseStrength * su();
+  // ---- Read slider values & update labels ----
+  smallNoiseStep     = sliderSmallNoiseStep.value(); spanSmallNoiseStep.html(nf(smallNoiseStep,1,4));
+  smallRadiusMax     = sliderSmallRadiusMax.value(); spanSmallRadiusMax.html(smallRadiusMax);
+  medNoiseStep       = sliderMedNoiseStep.value();   spanMedNoiseStep.html(nf(medNoiseStep,1,4));
+  medRadiusMax       = sliderMedRadiusMax.value();   spanMedRadiusMax.html(medRadiusMax);
+  springK            = sliderSpringK.value();        spanSpringK.html(nf(springK,1,3));
+  damping            = sliderDamping.value();        spanDamping.html(nf(damping,1,3));
+  impulseStrength    = sliderImpulse.value();        spanImpulse.html(nf(impulseStrength,1,2));
+  impactRadiusFactor = sliderImpactRadius.value();   spanImpactRadius.html(impactRadiusFactor);
+
+  // Convert base radii into responsive pixels
+  const smallR = ps(smallRadiusMax);
+  const medR   = ps(medRadiusMax);
 
   background(240);
   drawBackgroundCircles();
-
-  
 
   // --- small (compute physics and draw small↔small lines)
   let smallDefault = [];
@@ -300,7 +333,7 @@ function draw() {
     let bx=px(smallBase[i].x),by=py(smallBase[i].y);
     smallDefault[i]=createVector(bx+dx,by+dy);
   }
-  let cursorSquareSize=smallSizePx*impactRadiusFactor;
+  let cursorSquareSize=ps(smallSize)*impactRadiusFactor;
   for(let i=0;i<numSmall;i++){
     smallAcc[i].set(0,0);
     let spring=p5.Vector.sub(smallDefault[i],smallPos[i]).mult(springK);
@@ -308,7 +341,8 @@ function draw() {
     let p=smallPos[i];
     if(abs(mouseX-p.x)<cursorSquareSize/2&&abs(mouseY-p.y)<cursorSquareSize/2){
       let away=p5.Vector.sub(p,createVector(mouseX,mouseY));
-      away.normalize().mult(impulsePx); smallAcc[i].add(away);
+      away.normalize().mult(impulseStrength * su());
+      smallAcc[i].add(away);
     }
     smallVel[i].add(smallAcc[i]); smallVel[i].mult(damping); smallPos[i].add(smallVel[i]);
   }
@@ -330,14 +364,14 @@ function draw() {
     let bx=px(medBase[i].x),by=py(medBase[i].y);
     medDefault[i]=createVector(bx+dx,by+dy);
   }
-  cursorSquareSize=medSizePx*impactRadiusFactor;
+  cursorSquareSize=ps(medSize)*impactRadiusFactor;
   for(let i=0;i<numMed;i++){
     medAcc[i].set(0,0);
     let spring=p5.Vector.sub(medDefault[i],medPos[i]).mult(springK); medAcc[i].add(spring);
     let p=medPos[i];
     if(abs(mouseX-p.x)<cursorSquareSize/2&&abs(mouseY-p.y)<cursorSquareSize/2){
       let away=p5.Vector.sub(p,createVector(mouseX,mouseY));
-      away.normalize().mult(impulsePx); medAcc[i].add(away);
+      away.normalize().mult(impulseStrength * su()); medAcc[i].add(away);
     }
     medVel[i].add(medAcc[i]); medVel[i].mult(damping); medPos[i].add(medVel[i]);
   }
@@ -361,23 +395,23 @@ function draw() {
   drawingContext.setLineDash([]);
 
   // --- add-on ↔ small solid connections
-for (let i = 0; i < addSmallConnections.length; i++) {
-  const [ai, si] = addSmallConnections[i];
-  if (addPos[ai] && smallPos[si]) {
-    stroke(220);                // same color as solid med-small lines
-    strokeWeight(ps(1.8));      // same thickness
-    drawingContext.setLineDash([]); // solid line
-    line(addPos[ai].x, addPos[ai].y, smallPos[si].x, smallPos[si].y);
+  for (let i = 0; i < addSmallConnections.length; i++) {
+    const [ai, si] = addSmallConnections[i];
+    if (addPos[ai] && smallPos[si]) {
+      stroke(220);
+      strokeWeight(ps(1.8));
+      drawingContext.setLineDash([]);
+      line(addPos[ai].x, addPos[ai].y, smallPos[si].x, smallPos[si].y);
+    }
   }
-}
+  drawingContext.setLineDash([]);
 
-drawingContext.setLineDash([]);
+  // wedges behind avatars but above lines
+  drawHazardAreas();
 
-// <<< Add this line so wedges sit behind avatars but above lines
-drawHazardAreas();
-
-  // --- now draw the small squares on top (aspect preserved)
+  // --- draw the small squares on top (aspect preserved)
   noStroke();
+  const smallSizePx = ps(smallSize);
   for(let i=0;i<numSmall;i++){
     const p=smallPos[i];
     drawImageFit(smallImgs[i], p.x, p.y, smallSizePx);
@@ -385,13 +419,14 @@ drawHazardAreas();
 
   // --- draw the medium squares (aspect preserved)
   noStroke();
+  const medSizePx   = ps(medSize);
   for(let i=0;i<numMed;i++){
     const q=medPos[i];
     drawImageFit(medImgs[i], q.x, q.y, medSizePx);
   }
 
   // --- add-ons (same physics as others, no connections)
-  const addR = ps(smallRadiusMax); // reuse small radius range for motion
+  const addR = smallR; // reuse small radius range for motion
   for (let i = 0; i < addCount; i++) {
     addNoiseX[i] += smallNoiseStep;
     addNoiseY[i] += smallNoiseStep;
@@ -408,7 +443,7 @@ drawHazardAreas();
     const rp = addPos[i];
     if (abs(mouseX - rp.x) < cursorSquareSizeAdd / 2 && abs(mouseY - rp.y) < cursorSquareSizeAdd / 2) {
       const away = p5.Vector.sub(rp, createVector(mouseX, mouseY));
-      away.normalize().mult(impulsePx);
+      away.normalize().mult(impulseStrength * su());
       addAcc[i].add(away);
     }
 
@@ -425,43 +460,36 @@ drawHazardAreas();
     drawImageFit(addImgs[i], r.x, r.y, s);
   }
 
-// --- overlay text (Powering Global Trade with left→right 130→220 ombre)
-push();
-const ctx = drawingContext;                   // raw canvas context
-const fs = ps(200);                           // responsive font size
-const lh = fs * 0.9;                          // line height
-const cx = width / 2;
-const cy = height / 2;
+  // --- overlay text (brand grey gradient left→right)
+  push();
+  const ctx = drawingContext;                   // raw canvas context
+  const fs = ps(200);                           // responsive font size
+  const lh = fs * 0.9;                          // line height
+  const cx = width / 2;
+  const cy = height / 2;
 
-ctx.save();
-ctx.textAlign = 'center';
-ctx.textBaseline = 'middle';
-ctx.font = `${fs}px Helvetica, Arial, sans-serif`;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${fs}px Helvetica, Arial, sans-serif`;
 
-// --- gradient for large text ---
-const grad = ctx.createLinearGradient(0, 0, width, 0);
-grad.addColorStop(0, '#636472');   // dark grey on the left
-grad.addColorStop(1, '#C4C4CB');   // light grey on the right
-ctx.fillStyle = grad;
+  // --- gradient for large text ---
+  const grad = ctx.createLinearGradient(0, 0, width, 0);
+  grad.addColorStop(0, '#636472');   // dark grey on the left
+  grad.addColorStop(1, '#C4C4CB');   // light grey on the right
+  ctx.fillStyle = grad;
 
+  // two lines centered
+  ctx.fillText('Powering',     cx, cy - lh/2);
+  ctx.fillText('Global Trade', cx, cy + lh/2);
 
-// optional: soften like the mock (uncomment if you want)
-// ctx.globalAlpha = 0.9;
-
-// two lines centered
-ctx.fillText('Powering',    cx, cy - lh/2);
-ctx.fillText('Global Trade', cx, cy + lh/2);
-
-ctx.restore();
-pop();
-
-
+  ctx.restore();
+  pop();
 }
 
 //----------------------------------------------------------------------
 // Background Circles
 //----------------------------------------------------------------------
-
 function drawBackgroundCircles(){
   push(); stroke(200); strokeWeight(ps(2)); noFill();
   drawingContext.setLineDash([ps(1),ps(10)]);
