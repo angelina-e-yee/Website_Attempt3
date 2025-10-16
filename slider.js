@@ -2,18 +2,16 @@
 // GLOBAL VARIABLES
 //----------------------------------------------------------------------
 
-// --- Fixed design size (logical canvas) ---
-const ABS_W = 2098;
-const ABS_H = 1170;
+// --- Responsive scaling helpers ---
+const BASE_W = 2098;
+const BASE_H = 1170;
+function sx() { return width / BASE_W; }
+function sy() { return height / BASE_H; }
+function su() { return Math.min(sx(), sy()); }
 
-// In design space, these are identity (we scale the whole scene later)
-function sx() { return 1; }
-function sy() { return 1; }
-function su() { return 1; }
-
-function px(x) { return x; }                  // design X (px in 2098-wide space)
-function py(y) { return y; }                  // design Y (px in 1170-high space)
-function ps(v) { return v; }                  // design size (px)
+function px(x) { return x * sx(); }
+function py(y) { return y * sy(); }
+function ps(v) { return v * su(); }
 
 // Fit an image to a max dimension (keeps natural aspect ratio)
 function drawImageFit(img, cx, cy, maxDimPx) {
@@ -26,11 +24,11 @@ function drawImageFit(img, cx, cy, maxDimPx) {
   image(img, cx, cy, w, h);
 }
 
-let lastW = ABS_W, lastH = ABS_H;
+let lastW = BASE_W, lastH = BASE_H;
 
 // Squares (small, medium)
 let numSmall = 14;
-let smallSize = 49; // this is now a "max dimension" in DESIGN px
+let smallSize = 49; // this is now a "max dimension" not a fixed square
 let smallBase = [];
 let smallNoiseX = [], smallNoiseY = [], smallPos = [], smallVel = [], smallAcc = [], smallImgs = [];
 
@@ -61,7 +59,7 @@ const addOnFiles = [
 ];
 
 let addBase = []; // p5.Vector after setup()
-let addSizes = [80, 280, 220]; // each is a "max dimension" (DESIGN px)
+let addSizes = [80, 280, 220]; // each is a "max dimension"
 let addImgs = [];
 let addNoiseX = [], addNoiseY = [];
 let addPos = [], addVel = [], addAcc = [];
@@ -89,8 +87,9 @@ let controlsWrapper;
 
 let gridColor;
 
-// --- Hazard wedges ---------------------------------------------
+// --- Purple hazard wedges ---------------------------------------------
 const hazardAreas = [
+  // HAZARD #1: triangle using SMALL 5, 6, 8 (0-based indices 4, 5, 7)
   {
     vertices: [
       { kind: 'small', i: 5 },
@@ -98,6 +97,8 @@ const hazardAreas = [
       { kind: 'small', i: 8 },
     ]
   },
+
+  // HAZARD #2: triangle connecting SMALL 1, 2, and 13 (+ addon 2)
   {
     vertices: [
       { kind: 'small', i: 0 },
@@ -129,7 +130,8 @@ function preload() {
   }
 }
 
-// ---- Fullscreen, no scrollbars ----
+// ---- Make the canvas fill the screen with no scrollbars ----
+// Hard-lock the page to the viewport so no scrollbars appear.
 function enableFullscreenCanvas() {
   const style = document.createElement('style');
   style.innerHTML = `
@@ -138,24 +140,28 @@ function enableFullscreenCanvas() {
     canvas { display: block; } /* avoid inline-canvas line-height gap */
   `;
   document.head.appendChild(style);
+
+  // belt-and-braces
   document.documentElement.style.overflow = 'hidden';
   document.body.style.overflow = 'hidden';
 }
+
 
 //----------------------------------------------------------------------
 // setup()
 //----------------------------------------------------------------------
 function setup() {
-  enableFullscreenCanvas();
+  
+    enableFullscreenCanvas();
 
-  // Hi-DPI crispness, no CSS stretching
-  const DPR = Math.max(1, Math.round(window.devicePixelRatio || 1));
-  pixelDensity(DPR);
-
+  // Create and pin to viewport
   const cnv = createCanvas(windowWidth, windowHeight);
-  cnv.style('position', 'fixed');   // pin to viewport
-  cnv.style('inset', '0');
-  cnv.style('display', 'block');    // do NOT set width/height CSS
+  pixelDensity(1);                 // optional: avoids massive devicePixelRatio canvases
+  cnv.style('position', 'fixed');  // keep canvas fixed to window
+  cnv.style('inset', '0');         // top/right/bottom/left: 0
+  cnv.style('width', '100vw');     // fill viewport width
+  cnv.style('height', '100vh');    // fill viewport height
+  cnv.style('display', 'block');
 
   lastW = width;
   lastH = height;
@@ -163,7 +169,19 @@ function setup() {
   textAlign(CENTER, CENTER);
   gridColor = color(200, 200, 200, 150);
 
-  // --- small setup (DESIGN coordinates) ---
+  // If you have a fixed controls panel, cap it so it never forces scroll:
+  if (typeof controlsWrapper !== 'undefined' && controlsWrapper) {
+    controlsWrapper
+      .style('position','fixed')
+      .style('left','10px')
+      .style('top','10px')
+      .style('max-height','calc(100vh - 20px)')
+      .style('overflow','auto')
+      .style('max-width','min(320px, 35vw)')
+      .style('overflow-x','hidden');
+  }
+
+  // --- small setup
   smallBase = [
     createVector(650,300),createVector(300,800),createVector(850,320),createVector(1020,320),createVector(1200,200),
     createVector(1500,380),createVector(1670,400),createVector(1550,600),createVector(1770,680),createVector(1950,600),
@@ -172,12 +190,12 @@ function setup() {
   for (let i = 0; i < numSmall; i++) {
     smallNoiseX[i] = random(10);
     smallNoiseY[i] = random(10);
-    smallPos[i] = createVector(px(smallBase[i].x), py(smallBase[i].y)); // identity to design
+    smallPos[i] = createVector(px(smallBase[i].x), py(smallBase[i].y));
     smallVel[i] = createVector(0,0);
     smallAcc[i] = createVector(0,0);
   }
 
-  // --- medium setup (DESIGN coordinates)
+  // --- medium setup
   medBase = [createVector(390,390),createVector(1360,200),createVector(1500,900)];
   for (let i = 0; i < numMed; i++) {
     medNoiseX[i] = random(10);
@@ -187,7 +205,7 @@ function setup() {
     medAcc[i] = createVector(0,0);
   }
 
-  // --- add-ons (DESIGN coordinates)
+  // --- add-ons setup (convert raw coords to vectors; init physics)
   addBase = [
     createVector(895, 350),
     createVector(510, 900),
@@ -211,11 +229,7 @@ function setup() {
                                  .style('backdrop-filter','blur(4px)')
                                  .style('border','1px solid #ddd')
                                  .style('border-radius','8px')
-                                 .style('font','12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial')
-                                 .style('max-height','calc(100vh - 20px)')
-                                 .style('overflow','auto')
-                                 .style('max-width','min(320px, 35vw)')
-                                 .style('overflow-x','hidden');
+                                 .style('font','12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial');
 
   function addSliderRow(label, min, max, val, step) {
     const row = createDiv('').parent(controlsWrapper).style('margin','4px 0');
@@ -239,12 +253,11 @@ function setup() {
 // Responsive resize
 //----------------------------------------------------------------------
 function windowResized() {
-  // keep DPR crisp on resize
-  const DPR = Math.max(1, Math.round(window.devicePixelRatio || 1));
-  pixelDensity(DPR);
-
+  const scaleX = windowWidth / lastW, scaleY = windowHeight / lastH;
   resizeCanvas(windowWidth, windowHeight);
-  // IMPORTANT: we do NOT rescale positions anymore (global transform handles fit)
+  for (let i = 0; i < numSmall; i++) { smallPos[i].x*=scaleX; smallPos[i].y*=scaleY; }
+  for (let i = 0; i < numMed; i++)   { medPos[i].x*=scaleX;   medPos[i].y*=scaleY; }
+  for (let i = 0; i < addCount; i++) { addPos[i].x*=scaleX;   addPos[i].y*=scaleY; }
   lastW = width; lastH = height;
 }
 
@@ -267,7 +280,7 @@ function sortClockwise(points) {
 
 // --- draw hatch-only interior + outline (NO FILL, no “sheet”) ---
 function drawHazardLines(vertices) {
-  // Resolve vertices to live positions (DESIGN space)
+  // Resolve vertices to live positions
   let pts = vertices.map(resolveVertex).filter(Boolean);
   if (pts.length < 3) return;
 
@@ -308,17 +321,22 @@ function drawHazardLines(vertices) {
   }
   ctx.restore(); // ← removes clip & any state changes
 
-  // OUTLINE (match connection grey)
-  push();
-  noFill();
-  stroke(210);
-  strokeWeight(ps(1));           // match small↔small line weight
-  drawingContext.setLineDash([]); // solid outline (not dotted)
-  beginShape();
-  for (const p of pts) vertex(p.x, p.y);
-  endShape(CLOSE);
-  pop();
+  // ==== PURPLE OUTLINE (stroke only) ====
+  // ==== OUTLINE (match connection grey, not purple) ====
+push();
+noFill();
+// Use the same grey as your solid connections (210). 
+// If you prefer the slightly lighter 220 you use elsewhere, swap 210 → 220.
+stroke(210);
+strokeWeight(ps(1));           // match small↔small line weight
+drawingContext.setLineDash([]); // solid outline (not dotted)
+beginShape();
+for (const p of pts) vertex(p.x, p.y);
+endShape(CLOSE);
+pop();
+
 }
+
 
 // draw all hazards
 function drawHazardAreas() {
@@ -329,15 +347,6 @@ function drawHazardAreas() {
 // draw()
 //----------------------------------------------------------------------
 function draw() {
-  // --- compute fit-to-window transform (letterbox if needed)
-  const s  = Math.min(width / ABS_W, height / ABS_H);
-  const ox = (width  - s * ABS_W) / 2;
-  const oy = (height - s * ABS_H) / 2;
-
-  // mouse in DESIGN space for hit tests
-  const dmx = (mouseX - ox) / s;
-  const dmy = (mouseY - oy) / s;
-
   // ---- Read slider values & update labels ----
   smallNoiseStep     = sliderSmallNoiseStep.value(); spanSmallNoiseStep.html(nf(smallNoiseStep,1,4));
   smallRadiusMax     = sliderSmallRadiusMax.value(); spanSmallRadiusMax.html(smallRadiusMax);
@@ -348,17 +357,11 @@ function draw() {
   impulseStrength    = sliderImpulse.value();        spanImpulse.html(nf(impulseStrength,1,2));
   impactRadiusFactor = sliderImpactRadius.value();   spanImpactRadius.html(impactRadiusFactor);
 
-  // Radii are in DESIGN px
+  // Convert base radii into responsive pixels
   const smallR = ps(smallRadiusMax);
   const medR   = ps(medRadiusMax);
 
   background(240);
-
-  // === Global transform: everything below draws in DESIGN space ===
-  push();
-  translate(ox, oy);
-  scale(s);
-
   drawBackgroundCircles();
 
   // --- small (compute physics and draw small↔small lines)
@@ -376,9 +379,9 @@ function draw() {
     let spring=p5.Vector.sub(smallDefault[i],smallPos[i]).mult(springK);
     smallAcc[i].add(spring);
     let p=smallPos[i];
-    if(abs(dmx-p.x)<cursorSquareSize/2&&abs(dmy-p.y)<cursorSquareSize/2){
-      let away=p5.Vector.sub(p,createVector(dmx,dmy));
-      away.normalize().mult(impulseStrength /* * su() == 1 in design space */);
+    if(abs(mouseX-p.x)<cursorSquareSize/2&&abs(mouseY-p.y)<cursorSquareSize/2){
+      let away=p5.Vector.sub(p,createVector(mouseX,mouseY));
+      away.normalize().mult(impulseStrength * su());
       smallAcc[i].add(away);
     }
     smallVel[i].add(smallAcc[i]); smallVel[i].mult(damping); smallPos[i].add(smallVel[i]);
@@ -406,10 +409,9 @@ function draw() {
     medAcc[i].set(0,0);
     let spring=p5.Vector.sub(medDefault[i],medPos[i]).mult(springK); medAcc[i].add(spring);
     let p=medPos[i];
-    if(abs(dmx-p.x)<cursorSquareSize/2&&abs(dmy-p.y)<cursorSquareSize/2){
-      let away=p5.Vector.sub(p,createVector(dmx,dmy));
-      away.normalize().mult(impulseStrength);
-      medAcc[i].add(away);
+    if(abs(mouseX-p.x)<cursorSquareSize/2&&abs(mouseY-p.y)<cursorSquareSize/2){
+      let away=p5.Vector.sub(p,createVector(mouseX,mouseY));
+      away.normalize().mult(impulseStrength * su()); medAcc[i].add(away);
     }
     medVel[i].add(medAcc[i]); medVel[i].mult(damping); medPos[i].add(medVel[i]);
   }
@@ -479,9 +481,9 @@ function draw() {
 
     const cursorSquareSizeAdd = ps(addSizes[i]) * impactRadiusFactor;
     const rp = addPos[i];
-    if (abs(dmx - rp.x) < cursorSquareSizeAdd / 2 && abs(dmy - rp.y) < cursorSquareSizeAdd / 2) {
-      const away = p5.Vector.sub(rp, createVector(dmx, dmy));
-      away.normalize().mult(impulseStrength);
+    if (abs(mouseX - rp.x) < cursorSquareSizeAdd / 2 && abs(mouseY - rp.y) < cursorSquareSizeAdd / 2) {
+      const away = p5.Vector.sub(rp, createVector(mouseX, mouseY));
+      away.normalize().mult(impulseStrength * su());
       addAcc[i].add(away);
     }
 
@@ -494,40 +496,39 @@ function draw() {
   noStroke(); 
   for (let i = 0; i < addCount; i++) {
     const r = addPos[i];
-    const sMax = ps(addSizes[i]); // max dimension
-    drawImageFit(addImgs[i], r.x, r.y, sMax);
+    const s = ps(addSizes[i]); // max dimension
+    drawImageFit(addImgs[i], r.x, r.y, s);
   }
 
-  // --- overlay text (brand grey gradient left→right) ---
+  // --- overlay text (brand grey gradient left→right)
   push();
   const ctx = drawingContext;                   // raw canvas context
-  const fs = ps(200);                           // design font size
+  const fs = ps(200);                           // responsive font size
   const lh = fs * 0.9;                          // line height
-  const cx = ABS_W / 2;
-  const cy = ABS_H / 2;
+  const cx = width / 2;
+  const cy = height / 2;
 
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `${fs}px Helvetica, Arial, sans-serif`;
 
-  // gradient across the DESIGN width
-  const grad = ctx.createLinearGradient(0, 0, ABS_W, 0);
+  // --- gradient for large text ---
+  const grad = ctx.createLinearGradient(0, 0, width, 0);
   grad.addColorStop(0, '#636472');   // dark grey on the left
   grad.addColorStop(1, '#C4C4CB');   // light grey on the right
   ctx.fillStyle = grad;
 
+  // two lines centered
   ctx.fillText('Powering',     cx, cy - lh/2);
   ctx.fillText('Global Trade', cx, cy + lh/2);
 
   ctx.restore();
   pop();
-
-  pop(); // end global transform
 }
 
 //----------------------------------------------------------------------
-// Background Circles (DESIGN space)
+// Background Circles
 //----------------------------------------------------------------------
 function drawBackgroundCircles(){
   push(); stroke(200); strokeWeight(ps(2)); noFill();
@@ -536,7 +537,7 @@ function drawBackgroundCircles(){
   drawingContext.setLineDash([]); pop();
 
   push(); stroke(200); strokeWeight(ps(1)); noFill();
-  ellipse(ABS_W/2, ABS_H/2, ps(550), ps(550)); pop();
+  ellipse(width/2,height/2,ps(550),ps(550)); pop();
 
   push(); stroke(200); strokeWeight(ps(1)); noFill();
   ellipse(px(1700),py(400),ps(500),ps(500)); pop();
