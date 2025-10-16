@@ -143,10 +143,20 @@ function enableFullscreenCanvas() {
 function setup() {
   enableFullscreenCanvas();
 
+  // 🔧 Match the canvas backing buffer to the display's pixel ratio
+  const DPR = Math.max(1, Math.round(window.devicePixelRatio || 1));
+  pixelDensity(DPR);
+
   const cnv = createCanvas(windowWidth, windowHeight);
-  cnv.style('position', 'fixed');
-  cnv.style('inset', '0');
-  cnv.style('display', 'block');
+
+  // Keep the canvas **unstretched** (no CSS width/height)
+  cnv.style('position','fixed');
+  cnv.style('inset','0');
+  cnv.style('display','block');
+
+  // Optional: improve bitmap scaling when you do enlarge images
+  drawingContext.imageSmoothingEnabled = true;
+  drawingContext.imageSmoothingQuality = 'high';
 
   lastW = width;
   lastH = height;
@@ -230,6 +240,8 @@ function setup() {
 // Responsive resize
 //----------------------------------------------------------------------
 function windowResized() {
+  const DPR = Math.max(1, Math.round(window.devicePixelRatio || 1));
+  pixelDensity(DPR);
   const scaleX = windowWidth / lastW, scaleY = windowHeight / lastH;
   resizeCanvas(windowWidth, windowHeight);
   for (let i = 0; i < numSmall; i++) { smallPos[i].x*=scaleX; smallPos[i].y*=scaleY; }
@@ -237,6 +249,7 @@ function windowResized() {
   for (let i = 0; i < addCount; i++) { addPos[i].x*=scaleX;   addPos[i].y*=scaleY; }
   lastW = width; lastH = height;
 }
+
 
 // --- helpers (same resolve + sorting you already use)
 function resolveVertex(v) {
