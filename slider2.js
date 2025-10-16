@@ -144,11 +144,9 @@ function setup() {
   enableFullscreenCanvas();
 
   const cnv = createCanvas(windowWidth, windowHeight);
-  pixelDensity(1);
+  pixelDensity(Math.ceil(window.devicePixelRatio || 1));
   cnv.style('position', 'fixed');
   cnv.style('inset', '0');
-  cnv.style('width', '100vw');
-  cnv.style('height', '100vh');
   cnv.style('display', 'block');
 
   lastW = width;
