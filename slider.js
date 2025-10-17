@@ -238,16 +238,13 @@ function sortClockwise(points) {
     .map(o => o.p);
 }
 
-// --- draw hatch-only interior + outline (NO FILL, no “sheet”) ---
+// --- draw hatch-only interior + outline (no fill)
 function drawHazardLines(vertices) {
-  // Resolve vertices to live positions
   let pts = vertices.map(resolveVertex).filter(Boolean);
   if (pts.length < 3) return;
-
-  // Sort clockwise for a clean polygon
   pts = sortClockwise(pts);
 
-  // Compute bounds for hatching
+  // bounds for hatching
   let minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
   for (const p of pts) {
     if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
@@ -256,33 +253,27 @@ function drawHazardLines(vertices) {
 
   const ctx = drawingContext;
 
-  // Build a polygon path once
-  const poly = new Path2D();
-  poly.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) poly.lineTo(pts[i].x, pts[i].y);
-  poly.closePath();
-
-  // ==== HATCH STROKES ONLY (inside polygon) ====
+  // --- draw only the diagonal hatch lines inside polygon
   ctx.save();
-  ctx.globalAlpha = 1;                           // ensure no inherited alpha
-  ctx.globalCompositeOperation = 'source-over';  // normal blend
-  ctx.clip(poly);                                // clip to polygon
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.clip();
 
   ctx.lineWidth   = ps(1);
-  ctx.setLineDash([]);                           // solid hatch
-  ctx.strokeStyle = 'rgba(137, 90, 255, 0.4)';   // purple hatch line
-
+  ctx.strokeStyle = 'rgba(137, 90, 255, 0.4)'; // purple hatch
+  ctx.setLineDash([]);
   const step = ps(7), pad = ps(200);
   for (let x = minX - (maxY - minY) - pad; x < maxX + (maxY - minY) + pad; x += step) {
     ctx.beginPath();
-    ctx.moveTo(x,           maxY + pad);
+    ctx.moveTo(x, maxY + pad);
     ctx.lineTo(x + (maxY - minY) + pad, minY - pad);
     ctx.stroke();
   }
-  ctx.restore(); // ← removes clip & any state changes
+  ctx.restore();
 
-  // ==== PURPLE OUTLINE (stroke only) ====
-  // ==== OUTLINE (match connection grey, not purple) ====
+ // ==== OUTLINE (match connection grey, not purple) ====
 push();
 noFill();
 // Use the same grey as your solid connections (210). 
@@ -296,7 +287,6 @@ endShape(CLOSE);
 pop();
 
 }
-
 
 // draw all hazards
 function drawHazardAreas() {
